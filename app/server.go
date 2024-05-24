@@ -43,7 +43,24 @@ func main() {
 	}
 	fmt.Printf("request: %s\n", requestBody)
 	parts := bytes.Split(requestBody, crlfBytes)
-	conn.Write(sendEchoResponse(parts))
+	url := extractURLPath(parts)
+	urlParts := strings.Split(url, "/")
+	switch len(urlParts) {
+	case 2:
+		if urlParts[1] != "" {
+			resp := createResponseWithHeader(404, "", nil)
+			conn.Write(resp)
+			return
+		}
+		conn.Write(createResponseWithHeader(200, "", nil))
+	case 3:
+		if urlParts[1] != "echo" {
+			panic(fmt.Sprintf("URL is %q, can not handle it", url))
+		}
+		conn.Write(createResponseWithHeader(200, "text/plain", []byte(urlParts[2])))
+	default:
+		panic(fmt.Sprintf("URL is %q, can not handle it", url))
+	}
 }
 
 func createResponse(status int) []byte {
@@ -62,22 +79,18 @@ func createResponseWithHeader(status int, contentType string, body []byte) []byt
 		ContentType:   contentType,
 		ContentLength: len(body),
 	}
-	return slices.Concat(resp, crlfBytes, header.toBytes(), crlfBytes, crlfBytes, body)
-}
-
-func isSlashRequest(req [][]byte) bool {
-	reqLine := req[0]
-	reqLineSplits := bytes.Split(reqLine, spaceBytes)
-	return bytes.Equal(reqLineSplits[1], []byte("/"))
-}
-
-func sendEchoResponse(req [][]byte) []byte {
-	reqLine := req[0]
-	reqLineSplits := bytes.Split(reqLine, spaceBytes)
-	splittedURL := bytes.Split(reqLineSplits[1], []byte("/"))
-	if !bytes.Equal(splittedURL[1], []byte("echo")) {
-		fmt.Printf("%s\n", splittedURL[0])
-		panic("Fucked")
+	headerBytes := header.toBytes()
+	if headerBytes != nil {
+		return slices.Concat(resp, crlfBytes)
 	}
-	return createResponseWithHeader(200, "text/plain", splittedURL[2])
+	if body == nil {
+		return slices.Concat(resp, crlfBytes, headerBytes)
+	}
+	return slices.Concat(resp, crlfBytes, headerBytes, crlfBytes, body)
+}
+
+func extractURLPath(req [][]byte) string {
+	reqLine := req[0]
+	reqLineSplits := bytes.Split(reqLine, spaceBytes)
+	return string(reqLineSplits[1])
 }
