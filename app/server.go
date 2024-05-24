@@ -53,8 +53,6 @@ func createResponse(status int) []byte {
 	b.WriteString(fmt.Sprintf("%d", status))
 	b.Write(spaceBytes)
 	b.WriteString(http.StatusText(status))
-	b.WriteString(string(crlfBytes))
-	b.WriteString(string(crlfBytes))
 	return []byte(b.String())
 }
 
