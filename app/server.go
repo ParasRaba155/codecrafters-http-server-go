@@ -4,6 +4,13 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"slices"
+)
+
+var (
+	protocolBytes = []byte(`HTTP/1.1`)
+	spaceBytes    = []byte{' '}
+	crlfBytes     = []byte{'\r', '\n'}
 )
 
 func main() {
@@ -13,9 +20,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	_, err = l.Accept()
+	conn, err := l.Accept()
 	if err != nil {
 		fmt.Println("Error accepting connection: ", err.Error())
 		os.Exit(1)
 	}
+	_, err = conn.Write(createStatusOkResponse())
+	if err != nil {
+		fmt.Println("Error Writing Status OK: ", err.Error())
+		os.Exit(1)
+	}
+}
+
+func createStatusOkResponse() []byte {
+	statusBytes := []byte(`200 OK`)
+	return slices.Concat(protocolBytes, spaceBytes, statusBytes, crlfBytes, crlfBytes)
 }
