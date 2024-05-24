@@ -80,13 +80,10 @@ func createResponseWithHeader(status int, contentType string, body []byte) []byt
 		ContentLength: len(body),
 	}
 	headerBytes := header.toBytes()
-	if headerBytes != nil {
+	if headerBytes == nil {
 		return slices.Concat(resp, crlfBytes)
 	}
-	if body == nil {
-		return slices.Concat(resp, crlfBytes, headerBytes)
-	}
-	return slices.Concat(resp, crlfBytes, headerBytes, crlfBytes, body)
+	return slices.Concat(resp, crlfBytes, headerBytes, crlfBytes, crlfBytes, body)
 }
 
 func extractURLPath(req [][]byte) string {
