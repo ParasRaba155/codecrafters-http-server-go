@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -42,11 +43,7 @@ func main() {
 	}
 	fmt.Printf("request: %s\n", requestBody)
 	parts := bytes.Split(requestBody, crlfBytes)
-	if isSlashRequest(parts) {
-		conn.Write(createResponse(200))
-		return
-	}
-	conn.Write(createResponse(404))
+	conn.Write(sendEchoResponse(parts))
 }
 
 func createResponse(status int) []byte {
@@ -61,8 +58,28 @@ func createResponse(status int) []byte {
 	return []byte(b.String())
 }
 
+func createResponseWithHeader(status int, contentType string, body []byte) []byte {
+	resp := createResponse(status)
+	header := respHeader{
+		ContentType:   contentType,
+		ContentLength: len(body),
+	}
+	return slices.Concat(resp, crlfBytes, header.toBytes(), crlfBytes, crlfBytes, body)
+}
+
 func isSlashRequest(req [][]byte) bool {
 	reqLine := req[0]
 	reqLineSplits := bytes.Split(reqLine, spaceBytes)
 	return bytes.Equal(reqLineSplits[1], []byte("/"))
+}
+
+func sendEchoResponse(req [][]byte) []byte {
+	reqLine := req[0]
+	reqLineSplits := bytes.Split(reqLine, spaceBytes)
+	splittedURL := bytes.Split(reqLineSplits[1], []byte("/"))
+	if !bytes.Equal(splittedURL[1], []byte("echo")) {
+		fmt.Printf("%s\n", splittedURL[0])
+		panic("Fucked")
+	}
+	return createResponseWithHeader(200, "text/plain", splittedURL[2])
 }
