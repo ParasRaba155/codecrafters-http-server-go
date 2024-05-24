@@ -45,6 +45,7 @@ func main() {
 	parts := bytes.Split(requestBody, crlfBytes)
 	if isSlashRequest(parts) {
 		conn.Write(createResponse(200))
+		return
 	}
 	conn.Write(createResponse(404))
 }
@@ -64,4 +65,5 @@ func isSlashRequest(req [][]byte) bool {
 	reqLine := req[0]
 	reqLineSplits := bytes.Split(reqLine, spaceBytes)
 	return bytes.Equal(reqLineSplits[0], []byte("/"))
+	return bytes.Equal(reqLineSplits[1], []byte("/"))
 }
