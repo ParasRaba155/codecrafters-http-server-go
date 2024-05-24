@@ -14,6 +14,6 @@ func (r respHeader) toBytes() []byte {
 	if r.ContentType == "" {
 		return nil
 	}
-	str := fmt.Sprintf("Content-Type: %s\r\nContent-Length: %d", r.ContentType, r.ContentLength)
+	str := fmt.Sprintf("Content-Type: %s\r\nContent-Length: %d\r\n", r.ContentType, r.ContentLength)
 	return []byte(str)
 }
