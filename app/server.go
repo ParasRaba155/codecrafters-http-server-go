@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"os"
@@ -35,13 +34,13 @@ func main() {
 			os.Exit(1)
 		}
 	}()
-	var buf bytes.Buffer
-	_, err = io.Copy(&buf, conn)
+	requestBody := make([]byte, 1024)
+	_, err = conn.Read(requestBody)
 	if err != nil {
-		fmt.Println("Could not copy from the conn: ", err.Error())
+		fmt.Println("Could not read the connection: ", err.Error())
 		os.Exit(1)
 	}
-	requestBody := buf.Bytes()
+	fmt.Printf("request: %s\n", requestBody)
 	parts := bytes.Split(requestBody, crlfBytes)
 	if isSlashRequest(parts) {
 		conn.Write(createResponse(200))
@@ -55,6 +54,7 @@ func createResponse(status int) []byte {
 	b.Write(protocolBytes)
 	b.Write(spaceBytes)
 	b.WriteString(fmt.Sprintf("%d", status))
+	b.Write(spaceBytes)
 	b.WriteString(http.StatusText(status))
 	b.WriteString(string(crlfBytes))
 	b.WriteString(string(crlfBytes))
