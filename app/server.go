@@ -64,6 +64,5 @@ func createResponse(status int) []byte {
 func isSlashRequest(req [][]byte) bool {
 	reqLine := req[0]
 	reqLineSplits := bytes.Split(reqLine, spaceBytes)
-	return bytes.Equal(reqLineSplits[0], []byte("/"))
 	return bytes.Equal(reqLineSplits[1], []byte("/"))
 }
