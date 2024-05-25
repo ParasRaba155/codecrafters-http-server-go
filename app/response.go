@@ -4,12 +4,13 @@ import (
 	"fmt"
 )
 
+// respHeader the simple Header type
 type respHeader struct {
 	ContentType   string
 	ContentLength int
 }
 
-// toBytes implements json.Marshaler.
+// toBytes to get headers in byte format.
 func (r respHeader) toBytes() []byte {
 	if r.ContentType == "" {
 		return nil
