@@ -14,6 +14,7 @@ var (
 	protocolBytes = []byte(`HTTP/1.1`)
 	spaceBytes    = []byte{' '}
 	crlfBytes     = []byte{'\r', '\n'}
+	colonBytes    = []byte{':'}
 )
 
 func main() {
@@ -57,6 +58,8 @@ func main() {
 		// handle "/"
 		case "":
 			conn.Write(CreateResponseWithHeader(200, "", nil))
+		case "user-agent":
+			conn.Write(CreateResponseWithHeader(200, "text/plain", []byte(getUserAgent(parts))))
 		default:
 			conn.Write(CreateResponseWithHeader(404, "", nil))
 		}
@@ -114,4 +117,25 @@ func extractURLPath(req [][]byte) string {
 	reqLineSplits := bytes.Split(reqLine, spaceBytes)
 	// first is the protocol info and 2nd one is the URL path
 	return string(reqLineSplits[1])
+}
+
+// extractHeaders will read request bytes and extract headers from it
+func extractHeaders(req [][]byte) http.Header {
+	headers := http.Header{}
+
+	// first part is GET <url> <protocol>, ignore that
+	for i := 1; i < len(req); i++ {
+		headerBytes := bytes.SplitN(req[i], colonBytes, 2)
+		if len(headerBytes) != 2 {
+			continue
+		}
+		key, value := bytes.TrimLeft(headerBytes[0], " "), bytes.TrimLeft(headerBytes[1], " ")
+		headers.Add(string(key), string(value))
+	}
+	return headers
+}
+
+func getUserAgent(req [][]byte) string {
+	headers := extractHeaders(req)
+	return headers.Get("User-Agent")
 }
