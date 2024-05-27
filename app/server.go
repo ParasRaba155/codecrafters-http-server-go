@@ -92,7 +92,7 @@ func handleConnection(conn net.Conn) {
 		// handle "/echo/{str}"
 		case "echo":
 			headers := extractHeaders(parts)
-			encoding := headers.Get("Content-Encoding")
+			encoding := headers.Get("Accept-Encoding")
 			if encoding == "" {
 				conn.Write(CreateResponseWithHeader(200, "text/plain", []byte(urlParts[2])))
 				break
