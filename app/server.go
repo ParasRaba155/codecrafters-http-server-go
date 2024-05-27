@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -92,7 +93,7 @@ func handleConnection(conn net.Conn) {
 		// handle "/files/{filename}"
 		case "files":
 			filePath := urlParts[2]
-			conn.Write(GetFile(filePath))
+			conn.Write(GetFileResponse(filePath))
 		default:
 			conn.Write(CreateResponseWithHeader(404, "", nil))
 			fmt.Printf("URL is %q, can not handle it", url)
@@ -165,7 +166,36 @@ func getUserAgent(req [][]byte) string {
 	return headers.Get("User-Agent")
 }
 
-func GetFile(filename string) []byte {
-	fmt.Printf("DEBUG dir: %q, filename: %q\n", *dirToLook, filename)
-	return nil
+// GetFileResponse will try and read the file from `dirToLook` and return
+// appropriate slice of bytes response
+func GetFileResponse(filename string) []byte {
+	if dirToLook == nil {
+		return CreateResponseWithHeader(404, "application/octet-stream", nil)
+	}
+	dirEntries, err := os.ReadDir(*dirToLook)
+	if err != nil {
+		fmt.Printf("Could not read directory: %v\n", err)
+		return CreateResponseWithHeader(404, "application/octet-stream", nil)
+	}
+
+	for _, dirEntry := range dirEntries {
+		if dirEntry.Name() != filename {
+			continue
+		}
+		// current dir entry is the file
+		filePath := filepath.Join(*dirToLook, filename)
+		file, err := os.Open(filePath)
+		if err != nil {
+			fmt.Printf("Could not open the file Path: %q, err: %v\n", filePath, err)
+			return CreateResponseWithHeader(500, "application/octet-stream", nil)
+		}
+		fileContent, err := io.ReadAll(file)
+		if err != nil {
+			fmt.Printf("Could not read the file Path: %q, err: %v\n", filePath, err)
+			return CreateResponseWithHeader(500, "application/octet-stream", nil)
+		}
+		return CreateResponseWithHeader(200, "application/octet-stream", fileContent)
+	}
+	// file does not exist in the directory
+	return CreateResponseWithHeader(404, "application/octet-stream", nil)
 }
