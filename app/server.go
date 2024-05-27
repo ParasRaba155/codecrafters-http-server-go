@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -19,7 +20,10 @@ var (
 	colonBytes    = []byte{':'}
 )
 
+var dirToLook = flag.String("directory", "", "to look into the directory")
+
 func main() {
+	flag.Parse()
 	l, err := net.Listen("tcp", "0.0.0.0:4221")
 	if err != nil {
 		fmt.Println("Failed to bind to port 4221")
@@ -50,6 +54,7 @@ func handleConnection(conn net.Conn) {
 		}
 	}()
 
+	// read the request in sufficiently large buffer
 	requestBody := make([]byte, 1024)
 	_, err := conn.Read(requestBody)
 	if err != nil {
@@ -84,6 +89,10 @@ func handleConnection(conn net.Conn) {
 		// handle "/echo/{str}"
 		case "echo":
 			conn.Write(CreateResponseWithHeader(200, "text/plain", []byte(urlParts[2])))
+		// handle "/files/{filename}"
+		case "files":
+			filePath := urlParts[2]
+			conn.Write(GetFile(filePath))
 		default:
 			conn.Write(CreateResponseWithHeader(404, "", nil))
 			fmt.Printf("URL is %q, can not handle it", url)
@@ -154,4 +163,9 @@ func extractHeaders(req [][]byte) http.Header {
 func getUserAgent(req [][]byte) string {
 	headers := extractHeaders(req)
 	return headers.Get("User-Agent")
+}
+
+func GetFile(filename string) []byte {
+	fmt.Printf("DEBUG dir: %q, filename: %q\n", *dirToLook, filename)
+	return nil
 }
