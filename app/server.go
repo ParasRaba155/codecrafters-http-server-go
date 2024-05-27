@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -23,13 +25,23 @@ func main() {
 		fmt.Println("Failed to bind to port 4221")
 		os.Exit(1)
 	}
+	fmt.Println("Ready to serve on PORT=4221")
+	defer l.Close()
 
-	conn, err := l.Accept()
-	if err != nil {
-		fmt.Println("Error accepting connection: ", err.Error())
-		os.Exit(1)
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			fmt.Println("Error accepting connection: ", err.Error())
+		}
+		go handleConnection(conn)
 	}
+}
 
+// handleConnection will handle each connection corresponding to the
+// rules of the problem
+//
+// NOTE: Should be used as a separate go routine, to handle each connection concurrently
+func handleConnection(conn net.Conn) {
 	defer func() {
 		err := conn.Close()
 		if err != nil {
@@ -39,8 +51,12 @@ func main() {
 	}()
 
 	requestBody := make([]byte, 1024)
-	_, err = conn.Read(requestBody)
+	_, err := conn.Read(requestBody)
 	if err != nil {
+		if errors.Is(err, io.EOF) {
+			fmt.Println("Connection Closed")
+			os.Exit(0)
+		}
 		fmt.Println("Could not read the connection: ", err.Error())
 		os.Exit(1)
 	}
@@ -50,7 +66,7 @@ func main() {
 	// the request is split on '\r\n' into diff parts: info, header, and body
 	parts := bytes.Split(requestBody, crlfBytes)
 	url := extractURLPath(parts)
-	fmt.Printf("URL: %q", url)
+	fmt.Printf("URL: %q\n", url)
 	urlParts := strings.Split(url, "/")
 	switch len(urlParts) {
 	case 2:
