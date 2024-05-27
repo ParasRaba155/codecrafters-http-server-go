@@ -72,7 +72,9 @@ func handleConnection(conn net.Conn) {
 	// the request is split on '\r\n' into diff parts: info, header, and body
 	parts := bytes.Split(requestBody, crlfBytes)
 	url := extractURLPath(parts)
+	reqType := extractRequestType(parts)
 	fmt.Printf("URL: %q\n", url)
+	fmt.Printf("Request Type: %q\n", reqType)
 	urlParts := strings.Split(url, "/")
 	switch len(urlParts) {
 	case 2:
@@ -93,7 +95,17 @@ func handleConnection(conn net.Conn) {
 		// handle "/files/{filename}"
 		case "files":
 			filePath := urlParts[2]
-			conn.Write(GetFileResponse(filePath))
+			if reqType == "POST" {
+				conn.Write(
+					PostFileResponse(
+						filePath,
+						// remove the trailing null bytes
+						bytes.TrimRight(parts[len(parts)-1], string([]byte{0})),
+					),
+				)
+			} else {
+				conn.Write(GetFileResponse(filePath))
+			}
 		default:
 			conn.Write(CreateResponseWithHeader(404, "", nil))
 			fmt.Printf("URL is %q, can not handle it", url)
@@ -143,6 +155,14 @@ func extractURLPath(req [][]byte) string {
 	reqLineSplits := bytes.Split(reqLine, spaceBytes)
 	// first is the protocol info and 2nd one is the URL path
 	return string(reqLineSplits[1])
+}
+
+// extractRequestType will get the req type i.e. GET, POST, PUT, etc.
+func extractRequestType(req [][]byte) string {
+	reqLine := req[0]
+	reqLineSplits := bytes.Split(reqLine, spaceBytes)
+	// first is the protocol info and 2nd one is the URL path
+	return string(reqLineSplits[0])
 }
 
 // extractHeaders will read request bytes and extract headers from it
@@ -198,4 +218,24 @@ func GetFileResponse(filename string) []byte {
 	}
 	// file does not exist in the directory
 	return CreateResponseWithHeader(404, "application/octet-stream", nil)
+}
+
+// PostFileResponse will create the file at specified filepath in the `dirToLook` dir
+// and will send appropriate response
+func PostFileResponse(filename string, fileContent []byte) []byte {
+	if dirToLook == nil {
+		return CreateResponseWithHeader(404, "application/octet-stream", nil)
+	}
+	filePath := filepath.Join(*dirToLook, filename)
+	file, err := os.Create(filePath)
+	if err != nil {
+		fmt.Printf("Could not Create the file Path: %q, err: %v\n", filePath, err)
+		return CreateResponseWithHeader(500, "application/octet-stream", nil)
+	}
+	_, err = file.Write(fileContent)
+	if err != nil {
+		fmt.Printf("Could not Write to the file Path: %q, err: %v\n", filePath, err)
+		return CreateResponseWithHeader(500, "application/octet-stream", nil)
+	}
+	return CreateResponseWithHeader(201, "application/octet-stream", fileContent)
 }
