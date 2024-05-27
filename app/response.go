@@ -6,8 +6,9 @@ import (
 
 // respHeader the simple Header type
 type respHeader struct {
-	ContentType   string
-	ContentLength int
+	ContentType     string
+	ContentEncoding string
+	ContentLength   int
 }
 
 // toBytes to get headers in byte format.
@@ -15,6 +16,19 @@ func (r respHeader) toBytes() []byte {
 	if r.ContentType == "" {
 		return nil
 	}
-	str := fmt.Sprintf("Content-Type: %s\r\nContent-Length: %d\r\n", r.ContentType, r.ContentLength)
+	if r.ContentEncoding == "" {
+		str := fmt.Sprintf(
+			"Content-Type: %s\r\nContent-Length: %d\r\n",
+			r.ContentType,
+			r.ContentLength,
+		)
+		return []byte(str)
+	}
+	str := fmt.Sprintf(
+		"Content-Encoding: %s\r\nContent-Type: %s\r\nContent-Length: %d\r\n",
+		r.ContentEncoding,
+		r.ContentType,
+		r.ContentLength,
+	)
 	return []byte(str)
 }

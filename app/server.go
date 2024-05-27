@@ -91,7 +91,17 @@ func handleConnection(conn net.Conn) {
 		switch urlParts[1] {
 		// handle "/echo/{str}"
 		case "echo":
-			conn.Write(CreateResponseWithHeader(200, "text/plain", []byte(urlParts[2])))
+			headers := extractHeaders(parts)
+			encoding := headers.Get("Content-Encoding")
+			if encoding == "" {
+				conn.Write(CreateResponseWithHeader(200, "text/plain", []byte(urlParts[2])))
+				break
+			}
+			if !isValidEncoding(encoding) {
+				conn.Write(CreateResponseWithHeader(200, "text/plain", []byte(urlParts[2])))
+				break
+			}
+			conn.Write(CreateEncodedResponse(200, "text/plain", encoding, []byte(urlParts[2])))
 		// handle "/files/{filename}"
 		case "files":
 			filePath := urlParts[2]
@@ -141,6 +151,22 @@ func CreateResponseWithHeader(status int, contentType string, body []byte) []byt
 	header := respHeader{
 		ContentType:   contentType,
 		ContentLength: len(body),
+	}
+	headerBytes := header.toBytes()
+	if headerBytes == nil {
+		return slices.Concat(statusPart, crlfBytes, crlfBytes)
+	}
+	return slices.Concat(statusPart, crlfBytes, headerBytes, crlfBytes, body)
+}
+
+// CreateEncodedResponse will create an encoded reponse
+// it expects valid encoding string
+func CreateEncodedResponse(status int, contentType string, encoding string, body []byte) []byte {
+	statusPart := createBasicResponse(status)
+	header := respHeader{
+		ContentType:     contentType,
+		ContentLength:   len(body),
+		ContentEncoding: encoding,
 	}
 	headerBytes := header.toBytes()
 	if headerBytes == nil {
@@ -238,4 +264,9 @@ func PostFileResponse(filename string, fileContent []byte) []byte {
 		return CreateResponseWithHeader(500, "application/octet-stream", nil)
 	}
 	return CreateResponseWithHeader(201, "application/octet-stream", fileContent)
+}
+
+func isValidEncoding(e string) bool {
+	validEncodings := []string{"gzip"}
+	return slices.Contains(validEncodings, e)
 }
