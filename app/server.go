@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"errors"
 	"flag"
 	"fmt"
@@ -169,7 +170,17 @@ func CreateEncodedResponse(status int, contentType string, encoding string, body
 	if headerBytes == nil {
 		return slices.Concat(statusPart, crlfBytes, crlfBytes)
 	}
-	return slices.Concat(statusPart, crlfBytes, headerBytes, crlfBytes, body)
+	if encoding != "gzip" {
+		fmt.Printf("ERROR invalid encoding: %q\n", encoding)
+		return slices.Concat(statusPart, crlfBytes, headerBytes, crlfBytes, body)
+	}
+	encodeBody, err := encode(body)
+	if err != nil {
+		fmt.Printf("ERROR could not encode: %v\n", encoding)
+		return slices.Concat(statusPart, crlfBytes, headerBytes, crlfBytes, body)
+	}
+	header.ContentLength = len(encodeBody)
+	return slices.Concat(statusPart, crlfBytes, header.toBytes(), crlfBytes, encodeBody)
 }
 
 // extractURLPath is stored in the first part of the request
@@ -267,11 +278,21 @@ func PostFileResponse(filename string, fileContent []byte) []byte {
 // if there are valid encoding it will return it, along with true
 // otherwise it will return "", false
 func extractValidEncoding(e string) (string, bool) {
-	encodings := strings.Split(e, ", ")
-	for i := range encodings {
-		if encodings[i] == "gzip" {
-			return "gzip", true
-		}
+	if strings.Contains(e, "gzip") {
+		return "gzip", true
 	}
 	return "", false
+}
+
+func encode(e []byte) ([]byte, error) {
+	var b bytes.Buffer
+	gw := gzip.NewWriter(&b)
+	_, err := gw.Write(e)
+	if err != nil {
+		return nil, fmt.Errorf("could not write to gzip write: %w", err)
+	}
+	if err := gw.Close(); err != nil {
+		return nil, fmt.Errorf("could not close gzip writer: %w", err)
+	}
+	return b.Bytes(), nil
 }
