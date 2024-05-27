@@ -97,7 +97,8 @@ func handleConnection(conn net.Conn) {
 				conn.Write(CreateResponseWithHeader(200, "text/plain", []byte(urlParts[2])))
 				break
 			}
-			if !isValidEncoding(encoding) {
+			encoding, ok := extractValidEncoding(encoding)
+			if !ok {
 				conn.Write(CreateResponseWithHeader(200, "text/plain", []byte(urlParts[2])))
 				break
 			}
@@ -266,7 +267,16 @@ func PostFileResponse(filename string, fileContent []byte) []byte {
 	return CreateResponseWithHeader(201, "application/octet-stream", fileContent)
 }
 
-func isValidEncoding(e string) bool {
+// extractValidEncoding will check if any of the encodings are valid
+// if there are valid encoding it will return it, along with true
+// otherwise it will return "", false
+func extractValidEncoding(e string) (string, bool) {
 	validEncodings := []string{"gzip"}
-	return slices.Contains(validEncodings, e)
+	encodings := strings.Split(e, ",")
+	for i := range encodings {
+		if slices.Contains(validEncodings, encodings[i]) {
+			return encodings[i], true
+		}
+	}
+	return "", false
 }
