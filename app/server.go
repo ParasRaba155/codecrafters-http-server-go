@@ -93,16 +93,12 @@ func handleConnection(conn net.Conn) {
 		case "echo":
 			headers := extractHeaders(parts)
 			encoding := headers.Get("Accept-Encoding")
-			if encoding == "" {
-				conn.Write(CreateResponseWithHeader(200, "text/plain", []byte(urlParts[2])))
-				break
-			}
-			encoding, ok := extractValidEncoding(encoding)
+			e, ok := extractValidEncoding(encoding)
 			if !ok {
 				conn.Write(CreateResponseWithHeader(200, "text/plain", []byte(urlParts[2])))
 				break
 			}
-			conn.Write(CreateEncodedResponse(200, "text/plain", encoding, []byte(urlParts[2])))
+			conn.Write(CreateEncodedResponse(200, "text/plain", e, []byte(urlParts[2])))
 		// handle "/files/{filename}"
 		case "files":
 			filePath := urlParts[2]
@@ -271,11 +267,10 @@ func PostFileResponse(filename string, fileContent []byte) []byte {
 // if there are valid encoding it will return it, along with true
 // otherwise it will return "", false
 func extractValidEncoding(e string) (string, bool) {
-	validEncodings := []string{"gzip"}
-	encodings := strings.Split(e, ",")
+	encodings := strings.Split(e, ", ")
 	for i := range encodings {
-		if slices.Contains(validEncodings, encodings[i]) {
-			return encodings[i], true
+		if encodings[i] == "gzip" {
+			return "gzip", true
 		}
 	}
 	return "", false
