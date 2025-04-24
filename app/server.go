@@ -52,75 +52,84 @@ func handleConnection(conn net.Conn) {
 		err := conn.Close()
 		if err != nil {
 			fmt.Println("Could not close the connection: ", err.Error())
-			os.Exit(1)
 		}
 	}()
 
-	// read the request in sufficiently large buffer
-	requestBody := make([]byte, 1024)
-	_, err := conn.Read(requestBody)
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			fmt.Println("Connection Closed")
-			os.Exit(0)
+	for {
+		// read the request in a sufficiently large buffer
+		requestBody := make([]byte, 1024)
+		n, err := conn.Read(requestBody)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				fmt.Println("Connection Closed by client")
+				return
+			}
+			fmt.Println("Could not read the connection: ", err.Error())
+			return
 		}
-		fmt.Println("Could not read the connection: ", err.Error())
-		os.Exit(1)
-	}
 
-	fmt.Printf("request: %s\n", requestBody)
+		// Trim the request to the actual bytes read
+		requestBody = requestBody[:n]
 
-	// the request is split on '\r\n' into diff parts: info, header, and body
-	parts := bytes.Split(requestBody, crlfBytes)
-	url := extractURLPath(parts)
-	reqType := extractRequestType(parts)
-	fmt.Printf("URL: %q\n", url)
-	fmt.Printf("Request Type: %q\n", reqType)
-	urlParts := strings.Split(url, "/")
-	switch len(urlParts) {
-	case 2:
-		switch urlParts[1] {
-		// handle "/"
-		case "":
-			conn.Write(CreateResponseWithHeader(200, "", nil))
-		case "user-agent":
-			conn.Write(CreateResponseWithHeader(200, "text/plain", []byte(getUserAgent(parts))))
+		fmt.Printf("request: %s\n", requestBody)
+
+		// the request is split on '\r\n' into diff parts: info, header, and body
+		parts := bytes.Split(requestBody, crlfBytes)
+		url := extractURLPath(parts)
+		reqType := extractRequestType(parts)
+		fmt.Printf("URL: %q\n", url)
+		fmt.Printf("Request Type: %q\n", reqType)
+		urlParts := strings.Split(url, "/")
+		headers := extractHeaders(parts)
+
+		// Handle the request
+		switch len(urlParts) {
+		case 2:
+			switch urlParts[1] {
+			case "":
+				conn.Write(CreateResponseWithHeader(200, "", nil))
+			case "user-agent":
+				conn.Write(CreateResponseWithHeader(200, "text/plain", []byte(getUserAgent(parts))))
+			default:
+				conn.Write(CreateResponseWithHeader(404, "", nil))
+			}
+		case 3:
+			switch urlParts[1] {
+			case "echo":
+				encoding := headers.Get("Accept-Encoding")
+				e, ok := extractValidEncoding(encoding)
+				if !ok {
+					conn.Write(CreateResponseWithHeader(200, "text/plain", []byte(urlParts[2])))
+					break
+				}
+				conn.Write(CreateEncodedResponse(200, "text/plain", e, []byte(urlParts[2])))
+			case "files":
+				filePath := urlParts[2]
+				if reqType == "POST" {
+					conn.Write(
+						PostFileResponse(
+							filePath,
+							bytes.TrimRight(parts[len(parts)-1], string([]byte{0})),
+						),
+					)
+				} else {
+					conn.Write(GetFileResponse(filePath))
+				}
+			default:
+				conn.Write(CreateResponseWithHeader(404, "", nil))
+				fmt.Printf("URL is %q, cannot handle it", url)
+			}
 		default:
 			conn.Write(CreateResponseWithHeader(404, "", nil))
+			fmt.Printf("URL is %q, cannot handle it", url)
 		}
-	case 3:
-		switch urlParts[1] {
-		// handle "/echo/{str}"
-		case "echo":
-			headers := extractHeaders(parts)
-			encoding := headers.Get("Accept-Encoding")
-			e, ok := extractValidEncoding(encoding)
-			if !ok {
-				conn.Write(CreateResponseWithHeader(200, "text/plain", []byte(urlParts[2])))
-				break
-			}
-			conn.Write(CreateEncodedResponse(200, "text/plain", e, []byte(urlParts[2])))
-		// handle "/files/{filename}"
-		case "files":
-			filePath := urlParts[2]
-			if reqType == "POST" {
-				conn.Write(
-					PostFileResponse(
-						filePath,
-						// remove the trailing null bytes
-						bytes.TrimRight(parts[len(parts)-1], string([]byte{0})),
-					),
-				)
-			} else {
-				conn.Write(GetFileResponse(filePath))
-			}
-		default:
-			conn.Write(CreateResponseWithHeader(404, "", nil))
-			fmt.Printf("URL is %q, can not handle it", url)
+
+		// Check for Connection header
+		connectionHeader := headers.Get("Connection")
+		if strings.ToLower(connectionHeader) == "close" {
+			fmt.Println("Closing connection as requested by client")
+			return
 		}
-	default:
-		conn.Write(CreateResponseWithHeader(404, "", nil))
-		fmt.Printf("URL is %q, can not handle it", url)
 	}
 }
 
