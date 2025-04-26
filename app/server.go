@@ -81,17 +81,18 @@ func handleConnection(conn net.Conn) {
 		fmt.Printf("Request Type: %q\n", reqType)
 		urlParts := strings.Split(url, "/")
 		headers := extractHeaders(parts)
+		shouldClose := strings.ToLower(headers.Get("Connection")) == "close"
 
 		// Handle the request
 		switch len(urlParts) {
 		case 2:
 			switch urlParts[1] {
 			case "":
-				conn.Write(CreateResponseWithHeader(200, "", nil))
+				conn.Write(CreateResponseWithHeader(200, "", nil, shouldClose))
 			case "user-agent":
-				conn.Write(CreateResponseWithHeader(200, "text/plain", []byte(getUserAgent(parts))))
+				conn.Write(CreateResponseWithHeader(200, "text/plain", []byte(getUserAgent(parts)), shouldClose))
 			default:
-				conn.Write(CreateResponseWithHeader(404, "", nil))
+				conn.Write(CreateResponseWithHeader(404, "", nil, shouldClose))
 			}
 		case 3:
 			switch urlParts[1] {
@@ -99,7 +100,7 @@ func handleConnection(conn net.Conn) {
 				encoding := headers.Get("Accept-Encoding")
 				e, ok := extractValidEncoding(encoding)
 				if !ok {
-					conn.Write(CreateResponseWithHeader(200, "text/plain", []byte(urlParts[2])))
+					conn.Write(CreateResponseWithHeader(200, "text/plain", []byte(urlParts[2]), shouldClose))
 					break
 				}
 				conn.Write(CreateEncodedResponse(200, "text/plain", e, []byte(urlParts[2])))
@@ -110,17 +111,18 @@ func handleConnection(conn net.Conn) {
 						PostFileResponse(
 							filePath,
 							bytes.TrimRight(parts[len(parts)-1], string([]byte{0})),
+							shouldClose,
 						),
 					)
 				} else {
-					conn.Write(GetFileResponse(filePath))
+					conn.Write(GetFileResponse(filePath, shouldClose))
 				}
 			default:
-				conn.Write(CreateResponseWithHeader(404, "", nil))
+				conn.Write(CreateResponseWithHeader(404, "", nil, shouldClose))
 				fmt.Printf("URL is %q, cannot handle it", url)
 			}
 		default:
-			conn.Write(CreateResponseWithHeader(404, "", nil))
+			conn.Write(CreateResponseWithHeader(404, "", nil, shouldClose))
 			fmt.Printf("URL is %q, cannot handle it", url)
 		}
 
@@ -153,11 +155,12 @@ func createBasicResponse(status int) []byte {
 // NOTE:
 //   - For no header pass contentType as empty string
 //   - For no body pass body as nil
-func CreateResponseWithHeader(status int, contentType string, body []byte) []byte {
+func CreateResponseWithHeader(status int, contentType string, body []byte, closeConn bool) []byte {
 	statusPart := createBasicResponse(status)
 	header := respHeader{
-		ContentType:   contentType,
-		ContentLength: len(body),
+		ContentType:     contentType,
+		ContentLength:   len(body),
+		CloseConnection: closeConn,
 	}
 	headerBytes := header.toBytes()
 	if headerBytes == nil {
@@ -231,14 +234,14 @@ func getUserAgent(req [][]byte) string {
 
 // GetFileResponse will try and read the file from `dirToLook` and return
 // appropriate slice of bytes response
-func GetFileResponse(filename string) []byte {
+func GetFileResponse(filename string, shouldClose bool) []byte {
 	if dirToLook == nil {
-		return CreateResponseWithHeader(404, "application/octet-stream", nil)
+		return CreateResponseWithHeader(404, "application/octet-stream", nil, shouldClose)
 	}
 	dirEntries, err := os.ReadDir(*dirToLook)
 	if err != nil {
 		fmt.Printf("Could not read directory: %v\n", err)
-		return CreateResponseWithHeader(404, "application/octet-stream", nil)
+		return CreateResponseWithHeader(404, "application/octet-stream", nil, shouldClose)
 	}
 
 	for _, dirEntry := range dirEntries {
@@ -250,37 +253,37 @@ func GetFileResponse(filename string) []byte {
 		file, err := os.Open(filePath)
 		if err != nil {
 			fmt.Printf("Could not open the file Path: %q, err: %v\n", filePath, err)
-			return CreateResponseWithHeader(500, "application/octet-stream", nil)
+			return CreateResponseWithHeader(500, "application/octet-stream", nil, shouldClose)
 		}
 		fileContent, err := io.ReadAll(file)
 		if err != nil {
 			fmt.Printf("Could not read the file Path: %q, err: %v\n", filePath, err)
-			return CreateResponseWithHeader(500, "application/octet-stream", nil)
+			return CreateResponseWithHeader(500, "application/octet-stream", nil, shouldClose)
 		}
-		return CreateResponseWithHeader(200, "application/octet-stream", fileContent)
+		return CreateResponseWithHeader(200, "application/octet-stream", fileContent, shouldClose)
 	}
 	// file does not exist in the directory
-	return CreateResponseWithHeader(404, "application/octet-stream", nil)
+	return CreateResponseWithHeader(404, "application/octet-stream", nil, shouldClose)
 }
 
 // PostFileResponse will create the file at specified filepath in the `dirToLook` dir
 // and will send appropriate response
-func PostFileResponse(filename string, fileContent []byte) []byte {
+func PostFileResponse(filename string, fileContent []byte, shouldClose bool) []byte {
 	if dirToLook == nil {
-		return CreateResponseWithHeader(404, "application/octet-stream", nil)
+		return CreateResponseWithHeader(404, "application/octet-stream", nil, shouldClose)
 	}
 	filePath := filepath.Join(*dirToLook, filename)
 	file, err := os.Create(filePath)
 	if err != nil {
 		fmt.Printf("Could not Create the file Path: %q, err: %v\n", filePath, err)
-		return CreateResponseWithHeader(500, "application/octet-stream", nil)
+		return CreateResponseWithHeader(500, "application/octet-stream", nil, shouldClose)
 	}
 	_, err = file.Write(fileContent)
 	if err != nil {
 		fmt.Printf("Could not Write to the file Path: %q, err: %v\n", filePath, err)
-		return CreateResponseWithHeader(500, "application/octet-stream", nil)
+		return CreateResponseWithHeader(500, "application/octet-stream", nil, shouldClose)
 	}
-	return CreateResponseWithHeader(201, "application/octet-stream", fileContent)
+	return CreateResponseWithHeader(201, "application/octet-stream", fileContent, shouldClose)
 }
 
 // extractValidEncoding will check if any of the encodings are valid
